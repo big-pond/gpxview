@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>OpenLayers GPX Map</title>
+    <link rel="stylesheet" href="ol_lib/ol.css" type="text/css">
+    <script src="ol_lib/ol.js"></script>
+    <style>
+        html, body, #map {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            background-color: #f0f0f0;
+        }
+        #error-overlay {
+            position: absolute; top: 10px; left: 10px; background: rgba(255,0,0,0.8);
+            color: white; padding: 10px; border-radius: 5px; font-family: sans-serif;
+            display: none; z-index: 1000; max-width: 80%;
+        }
+    </style>
+</head>
+<body>
+    <div id="error-overlay"></div>
+    <div id="map"></div>
+
+    <script>
+        function showError(msg) {
+            const overlay = document.getElementById('error-overlay');
+            overlay.innerText = msg;
+            overlay.style.display = 'block';
+            console.error(msg);
+        }
+
+        let map, gpxLayer, markerLayer;
+
+        try {
+            if (typeof ol === 'undefined') {
+                throw new Error("Библиотека OpenLayers (ol.js) не загружена или пуста!");
+            }
+
+            // Инициализация карты с maxZoom: 21
+            map = new ol.Map({
+                target: 'map',
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.OSM()
+                    })
+                ],
+                view: new ol.View({
+                    center: ol.proj.fromLonLat([37.6173, 55.7558]), // Москва по умолчанию
+                    zoom: 4,
+                    maxZoom: 21 // Устанавливаем максимально возможный зум
+                })
+            });
+
+            console.log("Карта успешно инициализирована.");
+        } catch (e) {
+            showError("Ошибка инициализации карты: " + e.message);
+        }
+        function loadGpx(gpxContent) {
+            try {
+                if (!map) return;
+
+                // Очищаем старый трек и старые маркеры
+                if (gpxLayer) map.removeLayer(gpxLayer);
+                if (markerLayer) map.removeLayer(markerLayer);
+
+                if (!ol.format || !ol.format.GPX) {
+                    throw new Error("В файле ol.js отсутствует поддержка формата GPX (ol.format.GPX).");
+                }
+
+                // 1. Создаем источник и слой для самого трека
+                const vectorSource = new ol.source.Vector({
+                    features: new ol.format.GPX().readFeatures(gpxContent, {
+                        featureProjection: 'EPSG:3857'
+                    })
+                });
+
+                const trackStyle = new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#ff3333',
+                        width: 4
+                    })
+                });
+
+                gpxLayer = new ol.layer.Vector({
+                    source: vectorSource,
+                    style: trackStyle
+                });
+                map.addLayer(gpxLayer);
+
+                // 2. Логика поиска первой и последней точек для маркеров
+                const features = vectorSource.getFeatures();
+                if (features.length > 0) {
+                    let startCoords = null;
+                    let endCoords = null;
+
+                    features.forEach(feature => {
+                        const geom = feature.getGeometry();
+                        if (!geom) return;
+                        
+                        const type = geom.getType();
+
+                        if (type === 'LineString') {
+                            const coords = geom.getCoordinates();
+                            if (coords && coords.length > 0) {
+                                if (!startCoords) startCoords = coords[0];
+                                endCoords = coords[coords.length - 1];
+                            }
+                        } else if (type === 'MultiLineString') {
+                            const lines = geom.getLineStrings();
+                            if (lines && lines.length > 0) {
+                                const firstLineCoords = lines[0].getCoordinates();
+                                const lastLineCoords = lines[lines.length - 1].getCoordinates();
+                                
+                                if (!startCoords && firstLineCoords.length > 0) {
+                                    startCoords = firstLineCoords[0];
+                                }
+                                if (lastLineCoords.length > 0) {
+                                    endCoords = lastLineCoords[lastLineCoords.length - 1];
+                                }
+                            }
+                        }
+                    });
+
+                    // Если точки успешно определены, рисуем маркеры
+                    if (startCoords && endCoords) {
+                        const markerSource = new ol.source.Vector();
+
+                        // Создаем фичу для Старта
+                        const startFeature = new ol.Feature({
+                            geometry: new ol.geom.Point(startCoords)
+                        });
+                        // Использование картинки start.png
+                        startFeature.setStyle(new ol.style.Style({
+                            image: new ol.style.Icon({
+                                anchor: [0, 1], // Точка привязки: левый край по горизонтали, низ по вертикали (для флажков)
+                                // anchor: [0.5, 1], // Точка привязки: центр по горизонтали, низ по вертикали (для каплевидных маркеров)
+                                src: 'start.png',
+                                scale: 1.0        // Можно уменьшить (например, 0.5) или увеличить размер, если нужно
+                            })
+                        }));
+
+                        // Создаем фичу для Финиша
+                        const endFeature = new ol.Feature({
+                            geometry: new ol.geom.Point(endCoords)
+                        });
+                        // Использование картинки finish.png
+                        endFeature.setStyle(new ol.style.Style({
+                            image: new ol.style.Icon({
+                                anchor: [0, 1], // Точка привязки: центр по горизонтали, низ по вертикали
+                                src: 'finish.png',
+                                scale: 1.0
+                            })
+                        }));
+
+                        markerSource.addFeatures([startFeature, endFeature]);
+
+                        markerLayer = new ol.layer.Vector({
+                            source: markerSource
+                        });
+                        map.addLayer(markerLayer);
+                    }
+
+
+                    // Центрируем карту по границам трека с ограничением по максимальному зуму
+                    const extent = vectorSource.getExtent();
+                    map.getView().fit(extent, { 
+                        padding: [40, 40, 40, 40], 
+                        duration: 500,
+                        maxZoom: 21 
+                    });
+                    
+                    document.getElementById('error-overlay').style.display = 'none';
+                } else {
+                    showError("В GPX-файле не найдено точек или треков.");
+                }
+
+            } catch (e) {
+                showError("Ошибка обработки GPX: " + e.message);
+            }
+        }
+
+    </script>
+</body>
+</html>

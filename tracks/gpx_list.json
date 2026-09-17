@@ -1,0 +1,43 @@
+[
+    {
+        "id": 1,
+        "file_name": "2010-07-31_04-41-01.gpx",
+        "start_time": "2010-07-31T00:41:01Z",
+        "name": "Каменка - Кузнецк",
+        "duration": "02:36:58",
+        "moving_time": "02:31:57",
+        "stopped_time": "00:05:01",
+        "distance_km": 212.9
+    },
+    {
+        "id": 2,
+        "file_name": "2010-07-31_07-18-21.gpx",
+        "start_time": "2010-07-31T03:18:21Z",
+        "name": "Кузнецк - Переволоки",
+        "duration": "02:03:00",
+        "moving_time": "02:03:00",
+        "stopped_time": "00:00:00",
+        "distance_km": 164.3
+    },
+    {
+        "id": 3,
+        "file_name": "2010-07-31_10-35-32.gpx",
+        "start_time": "2010-07-31T05:35:32Z",
+        "name": "Переволоки - Кр.Яр",
+        "duration": "01:51:11",
+        "moving_time": "01:49:42",
+        "stopped_time": "00:01:29",
+        "distance_km": 133.52
+    },
+    {
+        "id": 4,
+        "file_name": "2010-07-31_12-27-48.gpx",
+        "start_time": "2010-07-31T07:27:48Z",
+        "name": "Кр.Яр - Северное",
+        "duration": "02:06:53",
+        "moving_time": "02:01:13",
+        "stopped_time": "00:05:40",
+        "distance_km": 156.28
+    }
+]
+
