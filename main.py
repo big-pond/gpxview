@@ -131,6 +131,18 @@ class GpxMapApp(QMainWindow):
         self.alt_curve = self.alt_plot.plot(pen=pg.mkPen(color='#004488', width=2)) 
         self.speed_curve = self.speed_plot.plot(pen=pg.mkPen(color='#006622', width=2))
 
+        # Вертикальные линии-курсоры на обоих графиках ---
+        line_pen = pg.mkPen(color='#ffaa00', width=1.5, style=Qt.PenStyle.DashLine)
+        self.alt_v_line = pg.InfiniteLine(angle=90, movable=False, pen=line_pen)
+        self.speed_v_line = pg.InfiniteLine(angle=90, movable=False, pen=line_pen)
+        
+        self.alt_plot.addItem(self.alt_v_line, ignoreBounds=True)
+        self.speed_plot.addItem(self.speed_v_line, ignoreBounds=True)
+        
+        # Подключаем отслеживание мыши
+        self.graph_widget.scene().sigMouseMoved.connect(self.on_mouse_moved)
+
+
     def load_json_data(self):
         json_path = os.path.join(self.tracks_dir, "gpx_list.json")
         if not os.path.exists(json_path):
@@ -181,6 +193,7 @@ class GpxMapApp(QMainWindow):
 
     def parse_gpx_file(self, gpx_path):
         """Парсит GPX файл и возвращает массивы расстояний, высот и скоростей."""
+        self.current_track_points = []
         distances = [0.0]
         elevations = []
         speeds = [0.0]
@@ -240,6 +253,15 @@ class GpxMapApp(QMainWindow):
         # Применяем легкое скользящее среднее к скорости для сглаживания графиков (убирает "шум" GPS)
         smoothed_speeds = self.smooth_data(speeds, window=5)
         
+        # Сохраняем полную карту точек для быстрого поиска по X-координате (дистанции)
+        for i in range(len(points)):
+            self.current_track_points.append({
+                'dist': distances[i],
+                'ele': elevations[i],
+                'speed': speeds[i],
+                'lon': points[i].longitude,
+                'lat': points[i].latitude
+            })
         return distances, elevations, smoothed_speeds
 
 
@@ -297,6 +319,31 @@ class GpxMapApp(QMainWindow):
                 print(f"Ошибка чтения GPX файла {file_name}: {e}")
         else:
             print(f"Файл трека НЕ найден: {gpx_path}")
+
+    # --- НОВОЕ: Обработчик движения мыши по графикам ---
+    def on_mouse_moved(self, pos):
+        if not self.current_track_points:
+            return
+
+        # Проверяем, находится ли мышь в зоне какого-либо из двух графиков
+        for plot in [self.alt_plot, self.speed_plot]:
+            plot_point = plot.vb.mapSceneToView(pos)
+            x_distance = plot_point.x() # Получаем дистанцию (ось X) в месте курсора
+            
+            # Проверяем, попадает ли X в диапазон нашего трека
+            if self.current_track_points[0]['dist'] <= x_distance <= self.current_track_points[-1]['dist']:
+                # Синхронно двигаем вертикальные линии-курсоры на графиках
+                self.alt_v_line.setValue(x_distance)
+                self.speed_v_line.setValue(x_distance)
+                
+                # Находим ближайшую точку трека методом бинарного поиска (для скорости)
+                closest_point = min(self.current_track_points, key=lambda p: abs(p['dist'] - x_distance))
+                
+                # Передаем координаты точки в JavaScript на карту
+                js_code = f"showMarkerAt({closest_point['lon']}, {closest_point['lat']});"
+                self.web_view.page().runJavaScript(js_code)
+                return
+
 
 if __name__ == "__main__":
     # Настройка argparse для обработки параметров командной строки

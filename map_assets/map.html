@@ -178,6 +178,17 @@
                 showError("Ошибка обработки GPX: " + e.message);
             }
         }
+        //  Функция перемещения маркера из Python ---
+        function showMarkerAt(lon, lat) {
+            markerSource.clear(); // Удаляем предыдущую точку
+            if (lon === null || lat === null) return;
+
+            const position = ol.proj.fromLonLat([lon, lat]);
+            const markerFeature = new ol.Feature({
+                geometry: new ol.geom.Point(position)
+            });
+            markerSource.addFeature(markerFeature);
+        }
 
     </script>
 </body>
