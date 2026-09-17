@@ -341,7 +341,7 @@ class GpxMapApp(QMainWindow):
                 
                 # Передаем координаты точки в JavaScript на карту
                 js_code = f"showMarkerAt({closest_point['lon']}, {closest_point['lat']});"
-                self.web_view.page().runJavaScript(js_code)
+                self.browser.page().runJavaScript(js_code)
                 return
 
 

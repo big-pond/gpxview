@@ -30,6 +30,7 @@
         }
 
         let map, gpxLayer, markerLayer;
+        let movableMarkerSource, movableMarkerLayer;
 
         try {
             if (typeof ol === 'undefined') {
@@ -50,6 +51,20 @@
                     maxZoom: 21 // Устанавливаем максимально возможный зум
                 })
             });
+            
+             movableMarkerSource = new ol.source.Vector();
+             movableMarkerLayer = new ol.layer.Vector({
+                source: movableMarkerSource,
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 7,
+                        fill: new ol.style.Fill({ color: '#ffaa00'}),
+                        stroke: new ol.style.Stroke({ color: '#ffffff', width: 2 })
+
+                    })
+                })
+            });
+            map.addLayer(movableMarkerLayer);
 
             console.log("Карта успешно инициализирована.");
         } catch (e) {
@@ -180,14 +195,14 @@
         }
         //  Функция перемещения маркера из Python ---
         function showMarkerAt(lon, lat) {
-            markerSource.clear(); // Удаляем предыдущую точку
+            movableMarkerSource.clear(); // Удаляем предыдущую точку
             if (lon === null || lat === null) return;
 
             const position = ol.proj.fromLonLat([lon, lat]);
             const markerFeature = new ol.Feature({
                 geometry: new ol.geom.Point(position)
             });
-            markerSource.addFeature(markerFeature);
+            movableMarkerSource.addFeature(markerFeature);
         }
 
     </script>
