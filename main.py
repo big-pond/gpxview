@@ -12,6 +12,8 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 import gpxpy
 import pyqtgraph as pg
+pg.setConfigOption('background', '#f0f0f0')  # Светло-серый фон
+pg.setConfigOption('foreground', 'k')        # Черный текст и шкалы
 
 class GpxMapApp(QMainWindow):
     def __init__(self, tracks_dir):
@@ -20,26 +22,44 @@ class GpxMapApp(QMainWindow):
         self.setWindowTitle("GPX Tracks Viewer")
         self.resize(1200, 700)
 
-        # self.init_ui()
+        self.init_ui()
 
-        # Главный контейнер со сплиттером (разделение таблица/карта)
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.setCentralWidget(splitter)
+        # Загрузка данных
+        self.tracks_data = []
+        self.load_json_data()
 
-        # Инициализация таблицы
+    def init_ui(self):
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        main_layout = QVBoxLayout(main_widget)
+        
+        # Главный горизонтальный сплиттер (Разделяет Таблицу и Правый блок)
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addWidget(main_splitter)
+        
+        # Инициализация таблицы слева
         self.table = QTableWidget()
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
-        splitter.addWidget(self.table)
+        main_splitter.addWidget(self.table)
+
+        # Правый блок (Карта + Графики)
+        right_container = QWidget()
+        right_layout = QVBoxLayout(right_container)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Вертикальный сплиттер для Карты и Графиков
+        right_splitter = QSplitter(Qt.Orientation.Vertical)
+        right_layout.addWidget(right_splitter)
 
         # Инициализация браузера для карты
         self.browser = QWebEngineView()
         self.browser.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         self.browser.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
         
-        # Загружаем карту относительно папки скрипта main.py
+        # Загружаем карту (сверху справа)
         current_dir = os.path.dirname(os.path.abspath(__file__))
         html_path = os.path.join(current_dir, "map_assets", "map.html")
     
@@ -53,18 +73,63 @@ class GpxMapApp(QMainWindow):
         except Exception as e:
             print(f"КРИТИЧЕСКАЯ ОШИБКА: Не удалось прочитать карту: {html_path}\n{e}")
             
-        splitter.addWidget(self.browser)
+        right_splitter.addWidget(self.browser)
 
-        # Пропорции сторон сплиттера (40% таблица, 60% карта)
-        splitter.setSizes([480, 720])
+        # Виджет графиков (снизу справа)
+        self.graph_widget = pg.GraphicsLayoutWidget()
+        right_splitter.addWidget(self.graph_widget)
+
+        # Настройка самих графиков в контейнере pyqtgraph
+        self.setup_plots()
+
+        # Добавляем правый блок в главный сплиттер
+        main_splitter.addWidget(right_container)
+        
+        # Задаем базовые пропорции
+        main_splitter.setSizes([350, 850])  # Таблица против Карты/Графиков
+        right_splitter.setSizes([500, 300]) # Карта против Графиков
+
+
 
         # Флаг, гарантирующий, что карта загрузилась перед передачей первого трека
         self.map_loaded = False
         self.browser.loadFinished.connect(self.on_map_loaded)
 
-        # Загрузка данных
-        self.tracks_data = []
-        self.load_json_data()
+    def setup_plots(self):
+        # Настройка цвета линий сетки (светло-серый, но темнее фона)
+        grid_pen = pg.mkPen(color='#d0d0d0', width=1)
+        # Карандаш для самих шкал и текста (черный)
+        axis_pen = pg.mkPen(color='k', width=1)
+        
+        # График высоты (верхний)
+        self.alt_plot = self.graph_widget.addPlot(row=0, col=0)
+        self.alt_plot.setLabel('left', 'Высота', units='м')
+        self.alt_plot.showGrid(x=True, y=True)
+        # Применяем цвета к осям и сетке верхнего графика
+        for axis_name in ['left', 'bottom']:
+            axis = self.alt_plot.getAxis(axis_name)
+            axis.setPen(axis_pen)       # Делаем саму линию шкалы черной
+            axis.setGrid(150)           # Включаем сетку (прозрачность от 0 до 255)
+            # Внутренний механизм pyqtgraph использует цвет оси для сетки, 
+            # но мы можем управлять её стилем через стили отображения, если это необходимо.
+
+        # График скорости (нижний)
+        self.speed_plot = self.graph_widget.addPlot(row=1, col=0)
+        self.speed_plot.setLabel('left', 'Скорость', units='км/ч')
+        self.speed_plot.setLabel('bottom', 'Дистанция', units='км')
+        self.speed_plot.showGrid(x=True, y=True)
+        # Применяем цвета к осям и сетке нижнего графика
+        for axis_name in ['left', 'bottom']:
+            axis = self.speed_plot.getAxis(axis_name)
+            axis.setPen(axis_pen)       # Делаем шкалу черной
+            axis.setGrid(150)           
+        
+        # Синхронизируем масштабирование и перемещение по оси X (дистанции) для обоих графиков
+        self.speed_plot.setXLink(self.alt_plot)
+        
+        # Создаем кривые (линии), которые будем обновлять данными
+        self.alt_curve = self.alt_plot.plot(pen=pg.mkPen(color='#004488', width=2)) 
+        self.speed_curve = self.speed_plot.plot(pen=pg.mkPen(color='#006622', width=2))
 
     def load_json_data(self):
         json_path = os.path.join(self.tracks_dir, "gpx_list.json")
@@ -114,6 +179,81 @@ class GpxMapApp(QMainWindow):
     def select_first_row(self):
         self.table.setCurrentCell(0, 0)
 
+    def parse_gpx_file(self, gpx_path):
+        """Парсит GPX файл и возвращает массивы расстояний, высот и скоростей."""
+        distances = [0.0]
+        elevations = []
+        speeds = [0.0]
+        
+        try:
+            with open(gpx_path, 'r', encoding='utf-8') as f:
+                gpx = gpxpy.parse(f)
+        except Exception as e:
+            print(f"Не удалось распарсить GPX: {e}")
+            return [], [], []
+
+        points = []
+        for track in gpx.tracks:
+            for segment in track.segments:
+                points.extend(segment.points)
+                
+        if not points:
+            return [], [], []
+
+        # Извлекаем начальную высоту
+        elevations.append(points[0].elevation if points[0].elevation is not None else 0.0)
+        
+        total_distance = 0.0
+        
+        for i in range(1, len(points)):
+            p1 = points[i-1]
+            p2 = points[i]
+            
+            # Считаем расстояние между точками (в метрах) и переводим в км
+            dist = p1.distance_3d(p2)
+            if dist is None:
+                dist = p1.distance_2d(p2)
+            
+            total_distance += (dist / 1000.0)
+            distances.append(total_distance)
+            
+            
+            # Сохраняем высоту (если ее нет, берем предыдущую)
+            ele = p2.elevation if p2.elevation is not None else elevations[-1]
+            elevations.append(ele)
+            
+            # Считаем скорость между точками
+            if p1.time and p2.time:
+                time_diff = (p2.time - p1.time).total_seconds()
+                if time_diff > 0:
+                    # Скорость = м/с * 3.6 -> км/ч
+                    speed = (dist / time_diff) * 3.6
+                    # Сглаживаем аномальные выбросы GPS (например, скорость выше 150 км/ч)
+                    if speed > 150: 
+                        speed = speeds[-1]
+                    speeds.append(speed)
+                else:
+                    speeds.append(speeds[-1])
+            else:
+                speeds.append(0.0)
+                
+        # Применяем легкое скользящее среднее к скорости для сглаживания графиков (убирает "шум" GPS)
+        smoothed_speeds = self.smooth_data(speeds, window=5)
+        
+        return distances, elevations, smoothed_speeds
+
+
+    def smooth_data(self, data, window=5):
+        """Простое скользящее среднее для сглаживания шумов GPS."""
+        if len(data) < window:
+            return data
+        smoothed = []
+        for i in range(len(data)):
+            start = max(0, i - window // 2)
+            end = min(len(data), i + window // 2 + 1)
+            smoothed.append(sum(data[start:end]) / (end - start))
+        return smoothed
+
     def on_selection_changed(self):
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
@@ -137,7 +277,22 @@ class GpxMapApp(QMainWindow):
                 # Используем json.dumps для безопасного экранирования спецсимволов в строке XML/GPX
                 js_code = f"loadGpx({json.dumps(gpx_content)});"
                 self.browser.page().runJavaScript(js_code)
+
+                # 2. Обновляем графики профиля высот и скорости
+                distances, elevations, speeds = self.parse_gpx_file(gpx_path)
                 
+                if distances:
+                    self.alt_curve.setData(distances, elevations)
+                    self.speed_curve.setData(distances, speeds)
+                    
+                    # Автомасштабирование графиков под новые данные
+                    self.alt_plot.enableAutoRange()
+                    self.speed_plot.enableAutoRange()
+                else:
+                    # Если данных нет, очищаем графики
+                    self.alt_curve.clear()
+                    self.speed_curve.clear()
+
             except Exception as e:
                 print(f"Ошибка чтения GPX файла {file_name}: {e}")
         else:
