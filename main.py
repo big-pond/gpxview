@@ -5,8 +5,8 @@ import math
 from datetime import datetime
 import argparse
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QSplitter, 
-                             QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget)
-from PyQt6.QtCore import Qt, QUrl
+                             QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget, QToolTip)
+from PyQt6.QtCore import Qt, QUrl, QPoint
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 
@@ -138,7 +138,13 @@ class GpxMapApp(QMainWindow):
         
         self.alt_plot.addItem(self.alt_v_line, ignoreBounds=True)
         self.speed_plot.addItem(self.speed_v_line, ignoreBounds=True)
-        
+
+        # ---  Плавающее текстовое окошко внутри графика  ---
+
+        self.tooltip_text = pg.TextItem(html="", anchor=(0, 1), fill=(240, 240, 240, 230), border='k')
+        self.alt_plot.addItem(self.tooltip_text)
+        self.tooltip_text.hide() # По умолчанию скрыто
+
         # Подключаем отслеживание мыши
         self.graph_widget.scene().sigMouseMoved.connect(self.on_mouse_moved)
 
@@ -320,7 +326,7 @@ class GpxMapApp(QMainWindow):
         else:
             print(f"Файл трека НЕ найден: {gpx_path}")
 
-    # --- НОВОЕ: Обработчик движения мыши по графикам ---
+    # --- Обработчик движения мыши по графикам ---
     def on_mouse_moved(self, pos):
         if not self.current_track_points:
             return
@@ -342,8 +348,30 @@ class GpxMapApp(QMainWindow):
                 # Передаем координаты точки в JavaScript на карту
                 js_code = f"showMarkerAt({closest_point['lon']}, {closest_point['lat']});"
                 self.browser.page().runJavaScript(js_code)
-                return
 
+                # Формируем HTML-текст для внутренней плавающей плашки
+                html_content = (
+                    f"<div style='color: black; font-size: 10pt; padding: 3px;'>"
+                    f"<b>Дистанция:</b> {closest_point['dist']:.2f} км<br>"
+                    f"<b>Высота:</b> {closest_point['ele']:.1f} м<br>"
+                    f"<b>Скорость:</b> {closest_point['speed']:.1f} км/ч"
+                    f"</div>"
+                )
+                
+                # Устанавливаем текст и позиционируем плашку чуть выше курсора мыши
+                self.tooltip_text.setHtml(html_content)
+                
+                # Берем Y-координату текущего графика (высоты), чтобы текст красиво парил сверху
+                # anchor=(0, 1) означает, что левый нижний угол текста цепляется за эту точку
+                # self.tooltip_text.setPos(x_distance, plot_point.y())
+                
+                self.tooltip_text.setPos(x_distance, 0)
+
+                self.tooltip_text.show()
+                return
+            
+        # Если мышь ушла за пределы графиков — скрываем текстовую плашку
+        self.tooltip_text.hide()
 
 if __name__ == "__main__":
     # Настройка argparse для обработки параметров командной строки
