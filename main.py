@@ -5,8 +5,9 @@ import math
 from datetime import datetime
 import argparse
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QSplitter, 
-                             QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget, QToolTip)
-from PyQt6.QtCore import Qt, QUrl, QPoint
+                             QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget, QMessageBox, QFileDialog)
+from PyQt6.QtCore import Qt, QUrl, QSettings
+from PyQt6.QtGui import QAction
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 
@@ -23,10 +24,14 @@ class GpxMapApp(QMainWindow):
         self.resize(1200, 700)
 
         self.init_ui()
+        self.create_menu_bar()
 
         # Загрузка данных
         self.tracks_data = []
         self.load_json_data()
+
+        self.load_settings()
+
 
     def init_ui(self):
         main_widget = QWidget()
@@ -34,8 +39,8 @@ class GpxMapApp(QMainWindow):
         main_layout = QVBoxLayout(main_widget)
         
         # Главный горизонтальный сплиттер (Разделяет Таблицу и Правый блок)
-        main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_layout.addWidget(main_splitter)
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addWidget(self.main_splitter)
         
         # Инициализация таблицы слева
         self.table = QTableWidget()
@@ -43,7 +48,7 @@ class GpxMapApp(QMainWindow):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
-        main_splitter.addWidget(self.table)
+        self.main_splitter.addWidget(self.table)
 
         # Правый блок (Карта + Графики)
         right_container = QWidget()
@@ -51,8 +56,8 @@ class GpxMapApp(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         
         # Вертикальный сплиттер для Карты и Графиков
-        right_splitter = QSplitter(Qt.Orientation.Vertical)
-        right_layout.addWidget(right_splitter)
+        self.right_splitter = QSplitter(Qt.Orientation.Vertical)
+        right_layout.addWidget(self.right_splitter)
 
         # Инициализация браузера для карты
         self.browser = QWebEngineView()
@@ -73,27 +78,118 @@ class GpxMapApp(QMainWindow):
         except Exception as e:
             print(f"КРИТИЧЕСКАЯ ОШИБКА: Не удалось прочитать карту: {html_path}\n{e}")
             
-        right_splitter.addWidget(self.browser)
+        self.right_splitter.addWidget(self.browser)
 
         # Виджет графиков (снизу справа)
         self.graph_widget = pg.GraphicsLayoutWidget()
-        right_splitter.addWidget(self.graph_widget)
+        self.right_splitter.addWidget(self.graph_widget)
 
         # Настройка самих графиков в контейнере pyqtgraph
         self.setup_plots()
 
         # Добавляем правый блок в главный сплиттер
-        main_splitter.addWidget(right_container)
+        self.main_splitter.addWidget(right_container)
         
         # Задаем базовые пропорции
-        main_splitter.setSizes([350, 850])  # Таблица против Карты/Графиков
-        right_splitter.setSizes([500, 300]) # Карта против Графиков
+        self.main_splitter.setSizes([350, 850])  # Таблица против Карты/Графиков
+        self.right_splitter.setSizes([500, 300]) # Карта против Графиков
 
 
 
         # Флаг, гарантирующий, что карта загрузилась перед передачей первого трека
         self.map_loaded = False
         self.browser.loadFinished.connect(self.on_map_loaded)
+
+
+    def load_settings(self):
+        ini_path = os.path.join(os.path.dirname(__file__), "config.ini")
+        # Инициализируем QSettings в формате INI
+        settings = QSettings(ini_path, QSettings.Format.IniFormat)
+        
+        # Восстанавливаем положение и размер главного окна
+        geometry = settings.value("geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+            
+        # Восстанавливаем состояние окна (развернуто/свернуто)
+        window_state = settings.value("windowState")
+        if window_state:
+            self.restoreState(window_state)
+            
+        # Восстанавливаем размеры (структуру) сплиттеров
+        main_splitter_state = settings.value("mainSplitter")
+        if main_splitter_state:
+            self.main_splitter.restoreState(main_splitter_state)
+            
+        right_splitter_state = settings.value("rightSplitter")
+        if right_splitter_state:
+            self.right_splitter.restoreState(right_splitter_state)
+
+
+    def closeEvent(self, event):
+        ini_path = os.path.join(os.path.dirname(__file__), "config.ini")
+        settings = QSettings(ini_path, QSettings.Format.IniFormat)
+        
+        # Сохраняем геометрию и положение главного окна
+        settings.setValue("geometry", self.saveGeometry())
+        settings.setValue("windowState", self.saveState())
+        
+        # Сохраняем структуру (состояние разделения) сплиттеров
+        settings.setValue("mainSplitter", self.main_splitter.saveState())
+        settings.setValue("rightSplitter", self.right_splitter.saveState())
+        
+        # Позволяем окну закрыться
+        event.accept()
+
+
+    def create_menu_bar(self):
+        menu_bar = self.menuBar()
+        
+        # Меню File
+        file_menu = menu_bar.addMenu("File")
+        
+        open_dir_action = QAction("Open directory...", self)
+        open_dir_action.setShortcut("Ctrl+O")
+        open_dir_action.triggered.connect(self.menu_open_directory)
+        file_menu.addAction(open_dir_action)
+        
+        file_menu.addSeparator()  # Разделительная линия
+        
+        quit_action = QAction("Quit", self)
+        quit_action.setShortcut("Ctrl+Q")
+        quit_action.triggered.connect(self.close)  # Закрытие приложения
+        file_menu.addAction(quit_action)
+        
+        # Меню Help
+        help_menu = menu_bar.addMenu("Help")
+        
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self.menu_about_app)
+        help_menu.addAction(about_action)
+        
+        about_qt_action = QAction("About Qt", self)
+        about_qt_action.triggered.connect(QApplication.aboutQt)  # Стандартное окно "О Qt"
+        help_menu.addAction(about_qt_action)
+
+    # --- СЛОТЫ ДЛЯ МЕНЮ ---
+    def menu_open_directory(self):
+        # Открывает диалог выбора папки
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Directory with GPX files")
+        if dir_path:
+            # На данном этапе просто выведем путь в консоль. 
+            # При необходимости здесь можно реализовать сканирование папки на наличие .gpx файлов.
+            print(f"Выбрана папка: {dir_path}")
+            
+    def menu_about_app(self):
+        QMessageBox.about(
+            self, 
+            "About GPX Viewer",
+            "<h3>GPX Track Viewer v1.0</h3>"
+            "<p>The application for visualizing GPX tracks using PyQt6, "
+            "OpenLayers (JavaScript) and PyQtGraph.</p>"
+            "<p>© 2026 Developer  <a href=\"https://github.com/big-pond\">https://github.com/big-pond</a></p>"
+        )
+
 
     def setup_plots(self):
         # Настройка цвета линий сетки (светло-серый, но темнее фона)

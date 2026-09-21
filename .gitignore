@@ -9,3 +9,5 @@ ol_advanced_cache/
 
 # Virtual environments
 .venv
+
+config.ini
