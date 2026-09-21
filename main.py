@@ -141,7 +141,8 @@ class GpxMapApp(QMainWindow):
 
         # ---  Плавающее текстовое окошко внутри графика  ---
 
-        self.tooltip_text = pg.TextItem(html="", anchor=(0, 1), fill=(240, 240, 240, 230), border='k')
+        self.tooltip_text = pg.TextItem(html="", anchor=(0, 0), fill=(240, 240, 240, 230), border='k')
+        self.alt_plot.addItem(self.tooltip_text, ignoreBounds=True)
         self.alt_plot.addItem(self.tooltip_text)
         self.tooltip_text.hide() # По умолчанию скрыто
 
@@ -361,12 +362,20 @@ class GpxMapApp(QMainWindow):
                 # Устанавливаем текст и позиционируем плашку чуть выше курсора мыши
                 self.tooltip_text.setHtml(html_content)
                 
-                # Берем Y-координату текущего графика (высоты), чтобы текст красиво парил сверху
-                # anchor=(0, 1) означает, что левый нижний угол текста цепляется за эту точку
-                # self.tooltip_text.setPos(x_distance, plot_point.y())
+                # --- ИСПРАВЛЕНО: Привязка к верхней границе + умный разворот у края ---
+                y_range = self.alt_plot.getViewBox().viewRange()[1]
+                y_upper_boundary = y_range[1] 
+                x_max = self.current_track_points[-1]['dist'] # Конечная дистанция трека
                 
-                self.tooltip_text.setPos(x_distance, 0)
-
+                # Если курсор в первой половине трека — показываем подсказку справа от линии
+                if x_distance < x_max / 2:
+                    self.tooltip_text.setAnchor((0, 0)) # Левый верхний угол
+                    self.tooltip_text.setPos(x_distance + 0.02, y_upper_boundary)
+                # Если во второй половине — разворачиваем подсказку влево, чтобы она не пряталась за край
+                else:
+                    self.tooltip_text.setAnchor((1, 0)) # Правый верхний угол
+                    self.tooltip_text.setPos(x_distance - 0.02, y_upper_boundary)
+                    
                 self.tooltip_text.show()
                 return
             
