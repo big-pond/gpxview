@@ -370,11 +370,12 @@ class GpxMapApp(QMainWindow):
                 # Если курсор в первой половине трека — показываем подсказку справа от линии
                 if x_distance < x_max / 2:
                     self.tooltip_text.setAnchor((0, 0)) # Левый верхний угол
-                    self.tooltip_text.setPos(x_distance + 0.02, y_upper_boundary)
+                    # self.tooltip_text.setPos(x_distance + 0.02, y_upper_boundary)
+                    self.tooltip_text.setPos(x_distance + x_max/50, y_upper_boundary)
                 # Если во второй половине — разворачиваем подсказку влево, чтобы она не пряталась за край
                 else:
                     self.tooltip_text.setAnchor((1, 0)) # Правый верхний угол
-                    self.tooltip_text.setPos(x_distance - 0.02, y_upper_boundary)
+                    self.tooltip_text.setPos(x_distance - x_max/50, y_upper_boundary)
                     
                 self.tooltip_text.show()
                 return
