@@ -16,21 +16,31 @@ import pyqtgraph as pg
 pg.setConfigOption('background', '#f0f0f0')  # Светло-серый фон
 pg.setConfigOption('foreground', 'k')        # Черный текст и шкалы
 
+from parsegpx import parse_gpx_files
+
+GPX_LIST_JSON = "gpx_list.json"
+
 class GpxMapApp(QMainWindow):
     def __init__(self, tracks_dir):
         super().__init__()
-        self.tracks_dir = os.path.abspath(tracks_dir) # Сохраняем переданный путь к папке
+        # self.tracks_dir = os.path.abspath(tracks_dir) # Сохраняем переданный путь к папке
         self.setWindowTitle("GPX Tracks Viewer")
         self.resize(1200, 700)
 
         self.init_ui()
         self.create_menu_bar()
 
+        self.tracks_dir = ""
+        self.load_settings()
+        if tracks_dir:  # Если передан как аргумент командной строки
+            self.tracks_dir = os.path.abspath(tracks_dir) # Сохраняем переданный путь к папке
+        elif not self.tracks_dir:
+            self.tracks_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracks")
+
         # Загрузка данных
         self.tracks_data = []
-        self.load_json_data()
+        self.load_json_data(self.tracks_dir, GPX_LIST_JSON)
 
-        self.load_settings()
 
 
     def init_ui(self):
@@ -94,8 +104,6 @@ class GpxMapApp(QMainWindow):
         self.main_splitter.setSizes([350, 850])  # Таблица против Карты/Графиков
         self.right_splitter.setSizes([500, 300]) # Карта против Графиков
 
-
-
         # Флаг, гарантирующий, что карта загрузилась перед передачей первого трека
         self.map_loaded = False
         self.browser.loadFinished.connect(self.on_map_loaded)
@@ -125,6 +133,8 @@ class GpxMapApp(QMainWindow):
         if right_splitter_state:
             self.right_splitter.restoreState(right_splitter_state)
 
+        self.tracks_dir = settings.value("tracksDir")
+
 
     def closeEvent(self, event):
         ini_path = os.path.join(os.path.dirname(__file__), "config.ini")
@@ -138,6 +148,8 @@ class GpxMapApp(QMainWindow):
         settings.setValue("mainSplitter", self.main_splitter.saveState())
         settings.setValue("rightSplitter", self.right_splitter.saveState())
         
+        settings.setValue("tracksDir", self.tracks_dir)
+
         # Позволяем окну закрыться
         event.accept()
 
@@ -176,9 +188,14 @@ class GpxMapApp(QMainWindow):
         # Открывает диалог выбора папки
         dir_path = QFileDialog.getExistingDirectory(self, "Select Directory with GPX files")
         if dir_path:
-            # На данном этапе просто выведем путь в консоль. 
             # При необходимости здесь можно реализовать сканирование папки на наличие .gpx файлов.
             print(f"Выбрана папка: {dir_path}")
+            file_path = os.path.join(dir_path, GPX_LIST_JSON)
+            if not os.path.isfile(file_path): 
+                parse_gpx_files(dir_path, GPX_LIST_JSON)
+            self.tracks_dir = dir_path
+            self.tracks_data.clear()
+            self.load_json_data(self.tracks_dir, GPX_LIST_JSON)
             
     def menu_about_app(self):
         QMessageBox.about(
@@ -236,7 +253,6 @@ class GpxMapApp(QMainWindow):
         self.speed_plot.addItem(self.speed_v_line, ignoreBounds=True)
 
         # ---  Плавающее текстовое окошко внутри графика  ---
-
         self.tooltip_text = pg.TextItem(html="", anchor=(0, 0), fill=(240, 240, 240, 230), border='k')
         self.alt_plot.addItem(self.tooltip_text, ignoreBounds=True)
         self.alt_plot.addItem(self.tooltip_text)
@@ -246,8 +262,8 @@ class GpxMapApp(QMainWindow):
         self.graph_widget.scene().sigMouseMoved.connect(self.on_mouse_moved)
 
 
-    def load_json_data(self):
-        json_path = os.path.join(self.tracks_dir, "gpx_list.json")
+    def load_json_data(self, tracks_dir, gpx_list_json):
+        json_path = os.path.join(tracks_dir, gpx_list_json)
         if not os.path.exists(json_path):
             print(f"Ошибка: Файл gpx_list.json не найден ни в переданной папке треков, ни в папку tracks проекта.")
             return
@@ -484,21 +500,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Просмотрщик GPX-треков на карте OpenLayers.")
     
     # Добавляем аргумент --dir или -d. По умолчанию берется папка 'trecks' рядом с main.py
-    default_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracks")
+    # default_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracks")
     parser.add_argument(
         "-d", "--dir", 
-        default=default_dir,
-        help=f"Путь к папке с GPX-файлами (по умолчанию: {default_dir})"
+        # default=default_dir,
+        # help=f"Путь к папке с GPX-файлами (по умолчанию: {default_dir})"
+        default="",
+        help=f"Путь к папке с GPX-файлами"
     )
     
     args = parser.parse_args()
 
     # Проверяем, существует ли указанная папка
-    if not os.path.isdir(args.dir):
-        print(f"Ошибка: Указанный путь не является существующей папкой: {args.dir}")
-        sys.exit(1)
-
-    print(f"Запуск приложения. Рабочая папка с треками: {os.path.abspath(args.dir)}")
+    if args.dir:
+        if not os.path.isdir(args.dir):
+            print(f"Ошибка: Указанный путь не является существующей папкой: {args.dir}")
+            sys.exit(1)
+        else:
+            print(f"Запуск приложения. Рабочая папка с треками: {os.path.abspath(args.dir)}")
 
     os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "9222"
     app = QApplication(sys.argv)
