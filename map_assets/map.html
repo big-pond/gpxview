@@ -37,6 +37,15 @@
                 throw new Error("Библиотека OpenLayers (ol.js) не загружена или пуста!");
             }
 
+            // Создаем элемент управления "Масштабная линейка"
+            const scaleControl = new ol.control.ScaleLine({
+                units: 'metric', // Использовать метрическую систему (метры, километры)
+                bar: true,      // Традиционный вид линейки (true сделает ее в виде чередующихся блоков)
+                steps: 4,        // Количество делений (актуально, если bar: true)
+                text: true       // Отображать текстовое значение масштаба
+            });
+
+
             // Инициализация карты с maxZoom: 21
             map = new ol.Map({
                 target: 'map',
@@ -45,6 +54,8 @@
                         source: new ol.source.OSM()
                     })
                 ],
+                // Переопределяем стандартные элементы управления, добавляя наш масштаб
+                controls: ol.control.defaults.defaults().extend([scaleControl]),
                 view: new ol.View({
                     center: ol.proj.fromLonLat([37.6173, 55.7558]), // Москва по умолчанию
                     zoom: 4,

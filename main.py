@@ -196,6 +196,7 @@ class GpxMapApp(QMainWindow):
             self.tracks_dir = dir_path
             self.tracks_data.clear()
             self.load_json_data(self.tracks_dir, GPX_LIST_JSON)
+
             
     def menu_about_app(self):
         QMessageBox.about(
@@ -300,6 +301,7 @@ class GpxMapApp(QMainWindow):
         if self.map_loaded:
             self.select_first_row()
 
+
     def on_map_loaded(self, success):
         if success:
             self.map_loaded = True
@@ -307,8 +309,10 @@ class GpxMapApp(QMainWindow):
             if self.table.rowCount() > 0:
                 self.select_first_row()
 
+
     def select_first_row(self):
         self.table.setCurrentCell(0, 0)
+
 
     def parse_gpx_file(self, gpx_path):
         """Парсит GPX файл и возвращает массивы расстояний, высот и скоростей."""
@@ -348,7 +352,6 @@ class GpxMapApp(QMainWindow):
             
             total_distance += (dist / 1000.0)
             distances.append(total_distance)
-            
             
             # Сохраняем высоту (если ее нет, берем предыдущую)
             ele = p2.elevation if p2.elevation is not None else elevations[-1]
@@ -395,6 +398,7 @@ class GpxMapApp(QMainWindow):
             smoothed.append(sum(data[start:end]) / (end - start))
         return smoothed
 
+
     def on_selection_changed(self):
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
@@ -438,6 +442,7 @@ class GpxMapApp(QMainWindow):
                 print(f"Ошибка чтения GPX файла {file_name}: {e}")
         else:
             print(f"Файл трека НЕ найден: {gpx_path}")
+
 
     # --- Обработчик движения мыши по графикам ---
     def on_mouse_moved(self, pos):
@@ -494,6 +499,7 @@ class GpxMapApp(QMainWindow):
             
         # Если мышь ушла за пределы графиков — скрываем текстовую плашку
         self.tooltip_text.hide()
+
 
 if __name__ == "__main__":
     # Настройка argparse для обработки параметров командной строки
