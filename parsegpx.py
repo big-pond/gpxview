@@ -26,7 +26,7 @@ def parse_gpx_files(source_dir, output_json):
                     gpx = gpxpy.parse(gpx_file)
                     
                     start_time = None
-                    total_duration = 0
+                    total_duration =  0
                     moving_time = 0
                     stopped_time = 0
                     distance_meters = 0
@@ -47,13 +47,33 @@ def parse_gpx_files(source_dir, output_json):
                         # Расчет расстояния
                         distance_meters = gpx.length_2d()
                         
-                        # Расчет времени (0.1 км/ч = 0.1 / 3.6 м/с)
-                        speed_limit_ms = 0.1 / 3.6
-                        moving_data = gpx.get_moving_data(stopped_speed_threshold=speed_limit_ms)
-                        if moving_data:
-                            moving_time = moving_data.moving_time
-                            stopped_time = moving_data.stopped_time
-                            total_duration = moving_time + stopped_time
+                        STOPPED_THRESHOLD_SPEED = 0.3 # 0.3 m/c ~ 1 km/h
+                        for track in gpx.tracks:
+                            for segment in track.segments:
+                                for i in range(1, len(segment.points)):
+                                    p1 = segment.points[i-1]
+                                    p2 = segment.points[i]
+                                    
+                                    if p1.time and p2.time:
+                                        # Находим реальный временной отрезок между точками
+                                        duration = p2.time - p1.time
+                                        
+                                        # Считаем расстояние между ними (в метрах)
+                                        distance = p2.distance_3d(p1) if p1.elevation and p2.elevation else p2.distance_2d(p1)
+                                        
+                                        # Вычисляем скорость на этом отрезке
+                                        seconds = duration.total_seconds()
+                                        if seconds > 0:
+                                            speed = distance / seconds
+                                            
+                                            # Если скорость ниже порога — это стоянка (включая ваши 11 часов)
+                                            if speed < STOPPED_THRESHOLD_SPEED:
+                                                stopped_time += seconds
+                                            else:
+                                                moving_time += seconds
+                        
+                        total_duration = moving_time + stopped_time
+
 
                     # Строгое форматирование ISO 8601 с буквой Z
                     start_time_str = None
