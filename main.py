@@ -5,7 +5,7 @@ import math
 from datetime import datetime
 import argparse
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QSplitter, 
-                             QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget, QMessageBox, QFileDialog)
+                             QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget, QProgressDialog, QMessageBox, QFileDialog)
 from PyQt6.QtCore import Qt, QUrl, QSettings
 from PyQt6.QtGui import QAction
 from PyQt6.QtWebEngineCore import QWebEngineSettings
@@ -16,7 +16,8 @@ import pyqtgraph as pg
 pg.setConfigOption('background', '#f0f0f0')  # Светло-серый фон
 pg.setConfigOption('foreground', 'k')        # Черный текст и шкалы
 
-from parsegpx import parse_gpx_files
+from parsegpx import GPXParserWorker
+# from parsegpx import parse_gpx_files
 
 GPX_LIST_JSON = "gpx_list.json"
 
@@ -183,7 +184,7 @@ class GpxMapApp(QMainWindow):
         about_qt_action.triggered.connect(QApplication.aboutQt)  # Стандартное окно "О Qt"
         help_menu.addAction(about_qt_action)
 
-    # --- СЛОТЫ ДЛЯ МЕНЮ ---
+    # --- СЛОТЫ ДЛЯ МЕНЮ И ИХ ОБРАБОТКА---
     def menu_open_directory(self):
         # Открывает диалог выбора папки
         dir_path = QFileDialog.getExistingDirectory(self, "Select Directory with GPX files")
@@ -192,12 +193,58 @@ class GpxMapApp(QMainWindow):
             print(f"Выбрана папка: {dir_path}")
             file_path = os.path.join(dir_path, GPX_LIST_JSON)
             if not os.path.isfile(file_path): 
-                parse_gpx_files(dir_path, GPX_LIST_JSON)
+                self.start_processing(dir_path, GPX_LIST_JSON)
             self.tracks_dir = dir_path
             self.tracks_data.clear()
             self.load_json_data(self.tracks_dir, GPX_LIST_JSON)
 
             
+    def start_processing(self, source_directory, output_name):
+        if not os.path.exists(source_directory):
+            QMessageBox.critical(self, "Ошибка", f"Папка {source_directory} не найдена.")
+            return
+
+        gpx_files = [f for f in os.listdir(source_directory) if f.lower().endswith('.gpx')]
+        total_files = len(gpx_files)
+
+        if total_files == 0:
+            QMessageBox.warning(self, "Внимание", "В папке нет GPX файлов.")
+            return
+
+        # Создаем и настраиваем QProgressDialog
+        self.progress_dialog = QProgressDialog("Подготовка к обработке...", "Отмена", 0, total_files, self)
+        self.progress_dialog.setWindowTitle("Пожалуйста, подождите")
+        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self.progress_dialog.setMinimumDuration(0) # Показывается мгновенно
+
+        # Инициализируем фоновый поток
+        self.worker = GPXParserWorker(source_directory, output_name)
+
+        # Связываем сигналы потока со слотами интерфейса
+        self.worker.progress_changed.connect(self.update_progress)
+        self.worker.finished_success.connect(self.on_success)
+        self.worker.error_occurred.connect(self.on_error)
+
+        # Если пользователь нажал кнопку "Отмена" в диалоге, прерываем поток
+        self.progress_dialog.canceled.connect(self.worker.terminate)
+
+        # Запуск потока
+        self.worker.start()
+
+    def update_progress(self, index, file_name):
+        # Обновляем текст и значение шкалы
+        self.progress_dialog.setLabelText(f"Обработка ({index}):\n{file_name}")
+        self.progress_dialog.setValue(index)
+
+    def on_success(self, path):
+        self.progress_dialog.close()
+        QMessageBox.information(self, "Успех", f"Файлы успешно обработаны!\nРезультат сохранен в:\n{path}")
+
+    def on_error(self, message):
+        self.progress_dialog.close()
+        QMessageBox.critical(self, "Ошибка", message)
+
+
     def menu_about_app(self):
         QMessageBox.about(
             self, 
