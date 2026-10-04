@@ -20,7 +20,7 @@ class GPXTableModel(QAbstractTableModel):
 
 
     def columnCount(self, parent=QModelIndex()):
-        return len(self._headers)
+        return len(self.headers)
 
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -28,7 +28,7 @@ class GPXTableModel(QAbstractTableModel):
             return None
         
         row_data = self._data[index.row()]
-        field_name = self._fields[index.column()]
+        field_name = self.fields[index.column()]
         value = row_data.get(field_name, "")
 
         if role == Qt.ItemDataRole.DisplayRole or role == Qt.ItemDataRole.EditRole:
@@ -39,7 +39,7 @@ class GPXTableModel(QAbstractTableModel):
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
         if index.isValid() and role == Qt.ItemDataRole.EditRole:
             row = index.row()
-            field_name = self._fields[index.column()]
+            field_name = self.fields[index.column()]
             
             # Разрешаем редактировать только поле "name" (индекс столбца 1)
             if field_name == "name":
@@ -56,7 +56,7 @@ class GPXTableModel(QAbstractTableModel):
             return Qt.ItemFlag.NoItemFlags
         
         # Получаем имя поля для текущего столбца
-        field_name = self._fields[index.column()]
+        field_name = self.fields[index.column()]
         
         # Делаем редактируемым только столбец "name"
         if field_name == "name":
@@ -68,7 +68,7 @@ class GPXTableModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
-                return self._headers[section]
+                return self.headers[section]
             else:
                 return section + 1
         return None

@@ -4,8 +4,8 @@ import json
 import math
 from datetime import datetime
 import argparse
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QSplitter, 
-                             QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget, QProgressDialog, QMessageBox, QFileDialog)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QSplitter, QTableView, 
+                             QAbstractItemView, QVBoxLayout, QWidget, QProgressDialog, QMessageBox, QFileDialog)
 from PyQt6.QtCore import Qt, QUrl, QSettings
 from PyQt6.QtGui import QAction
 from PyQt6.QtWebEngineCore import QWebEngineSettings
@@ -17,14 +17,13 @@ pg.setConfigOption('background', '#f0f0f0')  # Светло-серый фон
 pg.setConfigOption('foreground', 'k')        # Черный текст и шкалы
 
 from parsegpx import GPXParserWorker
-# from parsegpx import parse_gpx_files
+from gpxtablemodel import GPXTableModel
 
 GPX_LIST_JSON = "gpx_list.json"
 
 class GpxMapApp(QMainWindow):
     def __init__(self, tracks_dir):
         super().__init__()
-        # self.tracks_dir = os.path.abspath(tracks_dir) # Сохраняем переданный путь к папке
         self.setWindowTitle("GPX Tracks Viewer")
         self.resize(1200, 700)
 
@@ -39,9 +38,10 @@ class GpxMapApp(QMainWindow):
             self.tracks_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracks")
 
         # Загрузка данных
+        self.model = GPXTableModel()
+
         self.tracks_data = []
         self.load_json_data(self.tracks_dir, GPX_LIST_JSON)
-
 
 
     def init_ui(self):
@@ -54,12 +54,10 @@ class GpxMapApp(QMainWindow):
         main_layout.addWidget(self.main_splitter)
         
         # Инициализация таблицы слева
-        self.table = QTableWidget()
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.itemSelectionChanged.connect(self.on_selection_changed)
-        self.main_splitter.addWidget(self.table)
+        self.table_view = QTableView()
+        self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.main_splitter.addWidget(self.table_view)
 
         # Правый блок (Карта + Графики)
         right_container = QWidget()
@@ -271,8 +269,6 @@ class GpxMapApp(QMainWindow):
             axis = self.alt_plot.getAxis(axis_name)
             axis.setPen(axis_pen)       # Делаем саму линию шкалы черной
             axis.setGrid(150)           # Включаем сетку (прозрачность от 0 до 255)
-            # Внутренний механизм pyqtgraph использует цвет оси для сетки, 
-            # но мы можем управлять её стилем через стили отображения, если это необходимо.
 
         # График скорости (нижний)
         self.speed_plot = self.graph_widget.addPlot(row=1, col=0)
@@ -326,24 +322,14 @@ class GpxMapApp(QMainWindow):
         if not self.tracks_data:
             return
 
-        # Настройка колонок таблицы
-        headers = ["ID", "Название", "Дистанция (км)", "Длительность", "Время в движении", "Дата старта", "Имя файла"]
-        self.table.setColumnCount(len(headers))
-        self.table.setHorizontalHeaderLabels(headers)
-        self.table.setRowCount(len(self.tracks_data))
+        # Инициализация модели и представления
+        self.model = GPXTableModel(self.tracks_data)
+        self.table_view.setModel(self.model)
 
-        # Заполнение таблицы данными
-        for row, track in enumerate(self.tracks_data):
-            self.table.setItem(row, 0, QTableWidgetItem(str(track.get("id", 0))))
-            self.table.setItem(row, 1, QTableWidgetItem(str(track.get("name", "Без названия"))))
-            self.table.setItem(row, 2, QTableWidgetItem(str(track.get("distance_km", 0))))
-            self.table.setItem(row, 3, QTableWidgetItem(str(track.get("duration", ""))))
-            self.table.setItem(row, 4, QTableWidgetItem(str(track.get("moving_time", ""))))
-            self.table.setItem(row, 5, QTableWidgetItem(str(track.get("start_time", ""))))
-            self.table.setItem(row, 6, QTableWidgetItem(str(track.get("file_name", ""))))
-
-        self.table.resizeColumnsToContents()
-
+        self.table_view.resizeColumnsToContents()
+        selection_model = self.table_view.selectionModel()
+        selection_model.currentRowChanged.connect(self.on_selection_changed)
+        
         # Делаем активной первую строку, если карта уже готова
         if self.map_loaded:
             self.select_first_row()
@@ -353,12 +339,13 @@ class GpxMapApp(QMainWindow):
         if success:
             self.map_loaded = True
             # Если данные уже в таблице, активируем первый трек
-            if self.table.rowCount() > 0:
+            if self.model.rowCount() > 0:
                 self.select_first_row()
 
 
     def select_first_row(self):
-        self.table.setCurrentCell(0, 0)
+        self.table_view.setCurrentIndex(self.model.index(0, 0))
+        self.on_selection_changed()
 
 
     def parse_gpx_file(self, gpx_path):
@@ -447,7 +434,8 @@ class GpxMapApp(QMainWindow):
 
 
     def on_selection_changed(self):
-        selected_rows = self.table.selectionModel().selectedRows()
+        selected_rows = self.table_view.selectionModel().selectedRows()
+        print(selected_rows.index)
         if not selected_rows:
             return
 
@@ -470,7 +458,7 @@ class GpxMapApp(QMainWindow):
                 js_code = f"loadGpx({json.dumps(gpx_content)});"
                 self.browser.page().runJavaScript(js_code)
 
-                # 2. Обновляем графики профиля высот и скорости
+                # Обновляем графики профиля высот и скорости
                 distances, elevations, speeds = self.parse_gpx_file(gpx_path)
                 
                 if distances:
@@ -526,7 +514,7 @@ class GpxMapApp(QMainWindow):
                 # Устанавливаем текст и позиционируем плашку чуть выше курсора мыши
                 self.tooltip_text.setHtml(html_content)
                 
-                # --- ИСПРАВЛЕНО: Привязка к верхней границе + умный разворот у края ---
+                # Привязка к верхней границе + умный разворот у края ---
                 y_range = self.alt_plot.getViewBox().viewRange()[1]
                 y_upper_boundary = y_range[1] 
                 x_max = self.current_track_points[-1]['dist'] # Конечная дистанция трека
@@ -549,15 +537,11 @@ class GpxMapApp(QMainWindow):
 
 
 if __name__ == "__main__":
-    # Настройка argparse для обработки параметров командной строки
+
     parser = argparse.ArgumentParser(description="Просмотрщик GPX-треков на карте OpenLayers.")
     
-    # Добавляем аргумент --dir или -d. По умолчанию берется папка 'trecks' рядом с main.py
-    # default_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracks")
     parser.add_argument(
         "-d", "--dir", 
-        # default=default_dir,
-        # help=f"Путь к папке с GPX-файлами (по умолчанию: {default_dir})"
         default="",
         help=f"Путь к папке с GPX-файлами"
     )
