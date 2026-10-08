@@ -454,13 +454,11 @@ class GpxMapApp(QMainWindow):
         return smoothed
 
 
-    def on_selection_changed(self):
-        selected_rows = self.table_view.selectionModel().selectedRows()
-        print(selected_rows.index)
-        if not selected_rows:
-            return
+    def on_selection_changed(self, current, previous):
+        if not current.isValid():
+            return 
 
-        current_row = selected_rows[0].row()
+        current_row = current.row()
         track_info = self.tracks_data[current_row]
         file_name = track_info.get("file_name")
         
