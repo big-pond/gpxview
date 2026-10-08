@@ -24,7 +24,7 @@ class GPXTableModel(QAbstractTableModel):
 
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if not index.isValid() or not (0 <= index.row() < len(self._data)):
+        if not index.isValid():
             return None
         
         row_data = self._data[index.row()]
@@ -82,4 +82,3 @@ class GPXTableModel(QAbstractTableModel):
 
     def get_data(self):
         return self._data
-

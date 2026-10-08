@@ -149,7 +149,13 @@ class GpxMapApp(QMainWindow):
         
         settings.setValue("tracksDir", self.tracks_dir)
 
-        # Позволяем окну закрыться
+        if self.model.has_changes():
+            reply  = QMessageBox.question(self, "Подтверждение", f"Сохранить изменения {GPX_LIST_JSON}?",
+                                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
+                                          QMessageBox.StandardButton.No)
+        
+            if reply == QMessageBox.StandardButton.Yes:
+                self.save_json(self.tracks_dir, GPX_LIST_JSON)
         event.accept()
 
 
@@ -333,6 +339,21 @@ class GpxMapApp(QMainWindow):
         # Делаем активной первую строку, если карта уже готова
         if self.map_loaded:
             self.select_first_row()
+
+
+    def save_json(self, tracks_dir, gpx_list_json):
+        """Сохранение данных в текущий JSON-файл."""
+        json_path = os.path.join(tracks_dir, gpx_list_json)
+        if not json_path:
+            return
+
+        data = self.model.get_data()
+        try:
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            print(f"Изменения успешно сохранены в {json_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить изменения: {e}")
 
 
     def on_map_loaded(self, success):
